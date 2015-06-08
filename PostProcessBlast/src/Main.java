@@ -19,6 +19,7 @@ import parser.BlastResultsParser;
 import parser.PfamParser;
 import parser.ProteomeParser;
 import parser.RParser;
+import tools.CoocScoringModule;
 import tools.CoupleGenerator;
 import tools.FDREstimator;
 import tools.HitsGathering;
@@ -54,7 +55,7 @@ public class Main {
 			Set<String> proteinsWithNoCouplePFPT = new HashSet<String>();
 			Set<String> proteinsWithNoCouplePTPT = new HashSet<String>();
 			Set<String> proteinsWithNoCouple = new HashSet<String>();
-			
+
 			//Step 1: Parse les resultats Blast, creation de la collection de Hits par proteine
 			if(Global.VERBOSE) System.out.println("Parsing Blast results...");
 			Map<String,List<BlastHit>> hitsByProt = BlastResultsParser.getHitsByProt();
@@ -105,7 +106,7 @@ public class Main {
 			if(Global.VERBOSE) System.out.println("Parsing Pfam families...");
 			Set<PfamFamily> pfamFamilies = PfamParser.getFamilies();
 			if(Global.VERBOSE) System.out.println("Found "+pfamFamilies.size()+" different families.");
-			
+
 			//Step 5: Genere tous les couples Pfam-PutativeDomain et envoie les info au StatsPrinter
 			if(Global.VERBOSE) System.out.println("Testing all couples Pfam-Putative...");
 			proteinsWithNoCouplePFPT.addAll(proteinsWithAtLeastOnePutativeDomain);
@@ -124,7 +125,7 @@ public class Main {
 					Set<String> protsCoveringThePutativeDomain = couple.getPutative().getProteinsCoveringResidue(couple.getPutative().getBestPosition());
 					int nbProtPutativeDomain = protsCoveringThePutativeDomain.size();
 					int nbProtIntersec = Sets.intersection(couple.getPfam().getAllProteinNames(), protsCoveringThePutativeDomain).size();
-					
+
 					if(nbProtIntersec >= Global.NB_SEQ_INTERSECT) {
 						nbCouplesRetained++;
 						StatsPrinter.getInstance(Global.STATS_PFPT_PATH).addEntry(pfamFamilyName, putativeDomainIdentifier, nbProtPfam, nbProtPutativeDomain, nbProtIntersec);
@@ -170,35 +171,19 @@ public class Main {
 			if(Global.VERBOSE && Global.DYNAMIC_DISPLAY) System.out.println();
 			StatsPrinter.getInstance(Global.STATS_PTPT_PATH).close();
 			if(Global.VERBOSE) System.out.println("Generated "+nbCouplesTotal+" couples Putative-Putative. "+nbCouplesRetained+" couples with at least "+Global.NB_SEQ_INTERSECT+" proteins in common.");
-			
+
 			if(Global.VERBOSE) {
 				System.out.println("Number of proteins with at least one putative domain: "+proteinsWithAtLeastOnePutativeDomain.size());
 				System.out.println("Number of proteins with at least one putative domain and no couple Pfam-Putative: "+proteinsWithNoCouplePFPT.size());
 				System.out.println("Number of proteins with at least one putative domain and no couple Putative-Putative: "+proteinsWithNoCouplePTPT.size());
 				System.out.println("Number of proteins with only one putative domain and no Pfam : "+proteinsWithNoCouple.size());
 			}
-			
+
 
 			//Step 7: Run the R script to compute coocs
-			if(Global.VERBOSE) System.out.print("Starting R script to compute coocurrence scores...");
-			//Compute Pfam-Putative
-			Process child1 = Runtime.getRuntime().exec("Rscript "+Global.R_SCRIPT_PATH+" "+Global.STATS_PFPT_PATH+" "+Global.R_RESULTS_PFPT_PATH);
-			int code1 = child1.waitFor();
-			switch (code1) {
-			case 0:
-				break;
-			case 1:
-				System.out.println("R script failed for PFPT.");
-			}
-			//Compute Putative-Putative
-			Process child2 = Runtime.getRuntime().exec("Rscript "+Global.R_SCRIPT_PATH+" "+Global.STATS_PTPT_PATH+" "+Global.R_RESULTS_PTPT_PATH);
-			int code2 = child2.waitFor();
-			switch (code2) {
-			case 0:
-				break;
-			case 1:
-				System.out.println("R script failed for PTPT.");
-			}
+			if(Global.VERBOSE) System.out.print("Computing coocurrence scores...");
+			CoocScoringModule.compute(Global.STATS_PFPT_PATH, Global.R_RESULTS_PFPT_PATH);
+			CoocScoringModule.compute(Global.STATS_PTPT_PATH, Global.R_RESULTS_PTPT_PATH);
 			if(Global.VERBOSE) System.out.println("done.");
 
 			//Step 8: Parse R results to identify validated putative domains
@@ -210,26 +195,28 @@ public class Main {
 			Set<String> vDomainsPFPT = new HashSet<String>(); //les id des domaines valides par PFPT
 			Set<String> vDomainsPTPT = new HashSet<String>(); //les id des domaines valides par PTPT
 			Set<String> vDomainsAll = new HashSet<String>(); //les id de tous les domaines valides
-			
+
 			//Garde uniquement la meilleur P-valeur si un domaine est valide plusieurs fois
-			Map<String,ValidatedDomain> keepBestPvalue = new HashMap<String, ValidatedDomain>();
-			ValidatedDomain tmpVD;
-			for(ValidatedDomain vd : validatedDomainsPFPT) {
-				tmpVD = keepBestPvalue.get(vd.getIdentifierValidatedDomain());
-				if(tmpVD!=null) {
-					if(vd.getScore()<tmpVD.getScore()) {
+			if(Global.KEEPONLYBESTPVALUE) {
+				Map<String,ValidatedDomain> keepBestPvalue = new HashMap<String, ValidatedDomain>();
+				ValidatedDomain tmpVD;
+				for(ValidatedDomain vd : validatedDomainsPFPT) {
+					tmpVD = keepBestPvalue.get(vd.getIdentifierValidatedDomain());
+					if(tmpVD!=null) {
+						if(vd.getScore()<tmpVD.getScore()) {
+							keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
+						}
+					} else {
 						keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
 					}
-				} else {
-					keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
+				}
+				validatedDomainsPFPT.clear();
+				for(String s : keepBestPvalue.keySet()) {
+					validatedDomainsPFPT.add(keepBestPvalue.get(s));
 				}
 			}
-			validatedDomainsPFPT.clear();
-			for(String s : keepBestPvalue.keySet()) {
-				validatedDomainsPFPT.add(keepBestPvalue.get(s));
-			}
-			//--Garde
-			
+			//--Garde 
+
 			//Charge les domaines PFPT
 			for(ValidatedDomain v : validatedDomainsPFPT) {
 				vDomainsPFPT.add(v.getIdentifierValidatedDomain());
@@ -244,7 +231,7 @@ public class Main {
 			vDomainsAll.addAll(vDomainsPFPT);
 			vDomainsAll.addAll(vDomainsPTPT);
 			if(Global.VERBOSE) System.out.println("-> "+vDomainsAll.size()+" unique validated domains.");
-			
+
 			//Step 9: print results of validated putative domains
 			Map<PutativeDomain,Set<String>> coocProtsPerDomain = new HashMap<PutativeDomain, Set<String>>();
 
@@ -278,11 +265,17 @@ public class Main {
 						}
 					}
 				}
-				coocProtsPerDomain.put(dom, allowedProteins); //stock les proteines de tous les validants du dom
+				if(Global.INCLUDEPTPTVALIDATIONS) {
+					coocProtsPerDomain.put(dom, allowedProteins); //stock les proteines de tous les validants du dom
+				}
 			}
 
 			if(Global.VERBOSE) System.out.println("Printing results for validated domains PTPT...");
 			Map<PutativeDomain,Set<String>> pdomainsPTPT = new HashMap<PutativeDomain, Set<String>>();
+			
+			System.out.println(">. "+validatedDomainsPFPT);
+			System.out.println(">. "+validatedDomainsPTPT);
+			
 			for(ValidatedDomain vDomain : validatedDomainsPTPT) {
 				PutativeDomain domain = null;
 				for(PutativeDomain pd : putativeDomainsByProt.get(vDomain.getIdentifierValidatedDomain().split("/")[0])) {
@@ -312,8 +305,10 @@ public class Main {
 				}
 				Set<String> aProts = coocProtsPerDomain.get(dom); //recupere les resultats de PFPT
 				if(aProts==null) aProts = new HashSet<String>(); //s'il n'y a pas de PFPT, faut initialiser
-//				aProts.addAll(allowedProteins);
-//				coocProtsPerDomain.put(dom, aProts);
+				if(Global.INCLUDEPTPTVALIDATIONS) {
+					aProts.addAll(allowedProteins);
+					coocProtsPerDomain.put(dom, aProts);
+				}
 			}
 
 			//Step 10: Print Fasta
@@ -327,11 +322,40 @@ public class Main {
 
 			if(Global.VERBOSE) System.out.println("Printing Fasta...");
 			int domPrinted = 0;
-			for(PutativeDomain dom : coocProtsPerDomain.keySet()) {
-				FastaPrinter.getInstance().printFasta(dom,coocProtsPerDomain.get(dom));
-				domPrinted++;
-				if(Global.VERBOSE && Global.DYNAMIC_DISPLAY) System.out.print("\r"+domPrinted+"/"+coocProtsPerDomain.keySet().size());
+			if(Global.ONEMODELPERDOMAIN) {
+				for(PutativeDomain dom : coocProtsPerDomain.keySet()) {
+					FastaPrinter.getInstance().printFasta(dom,coocProtsPerDomain.get(dom));
+					domPrinted++;
+					if(Global.VERBOSE && Global.DYNAMIC_DISPLAY) System.out.print("\r"+domPrinted+"/"+coocProtsPerDomain.keySet().size());
+				}
+			} else { //Print plusieurs models pour un meme domain
+				for(PutativeDomain domain : pdomainsPFPT.keySet()) { //dabord les PFPT
+					for(String fname : pdomainsPFPT.get(domain)) { //itere sur la liste des domaines validants le putative
+						for(PfamFamily fam : pfamFamilies) { //itere tous les Pfam
+							if(fam.getFamilyName().equals(fname)) { //recherche la famille qui correspond au fname
+								FastaPrinter.getInstance().printFasta(domain, fam.getAllProteinNames());
+								domPrinted++;
+								if(Global.VERBOSE && Global.DYNAMIC_DISPLAY) System.out.print("\r"+domPrinted);
+							}
+						}
+					}
+				}
+				System.out.println();
+				for(PutativeDomain dom : pdomainsPTPT.keySet()) { //puis chaque PTPT
+					for(String validantID : pdomainsPTPT.get(dom)) { //pour chaque validant
+						for(PutativeDomain validatingDomain : putativeDomainsByProt.get(dom.getQueryName()+"_"+dom.getQuerySpecies())) {
+							if(validatingDomain.getIdentifier().equals(validantID) && !validatingDomain.equals(dom)) {
+								FastaPrinter.getInstance().printFasta(dom, validatingDomain.getProteinsCoveringResidue(validatingDomain.getBestPosition()));
+								domPrinted++;
+								if(Global.VERBOSE && Global.DYNAMIC_DISPLAY) System.out.print("\r"+domPrinted);
+								break;
+							}
+						}
+					}
+				}
+				
 			}
+			
 			if(Global.VERBOSE && Global.DYNAMIC_DISPLAY) System.out.println();
 			if(Global.VERBOSE) System.out.println("Printing done.");
 			FastaPrinter.close();
