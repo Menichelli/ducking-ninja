@@ -1,7 +1,7 @@
 /**
  * 
  */
-package parser;
+package tools.parser;
 
 
 import java.io.BufferedReader;
@@ -35,8 +35,8 @@ public class RParser {
 		while((sCurrentLine = br.readLine())!=null) {
 			tCurrentLine = sCurrentLine.split("\\s+");
 			if(tCurrentLine==null || sCurrentLine.equals("NULL")) break;
-				if(tCurrentLine[5].equals("-Inf")) continue;
-				else pvalue = Double.parseDouble(tCurrentLine[5]);
+			if(tCurrentLine[5].equals("-Inf")) pvalue = Double.MIN_VALUE;
+			else pvalue = Double.parseDouble(tCurrentLine[5]);
 			ret.add(new ValidatedDomain(tCurrentLine[1], tCurrentLine[0], pvalue));
 		}
 		br.close();

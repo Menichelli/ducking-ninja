@@ -15,14 +15,14 @@ import model.CouplePutativePutative;
 import model.PfamFamily;
 import model.PutativeDomain;
 import model.ValidatedDomain;
-import parser.BlastResultsParser;
-import parser.PfamParser;
-import parser.ProteomeParser;
-import parser.RParser;
 import tools.CoocScoringModule;
 import tools.CoupleGenerator;
 import tools.FDREstimator;
 import tools.HitsGathering;
+import tools.parser.BlastResultsParser;
+import tools.parser.PfamParser;
+import tools.parser.ProteomeParser;
+import tools.parser.RParser;
 import tools.printer.FastaPrinter;
 import tools.printer.ResultsPrinter;
 import tools.printer.StatsPrinter;
@@ -182,15 +182,12 @@ public class Main {
 
 			//Step 7: Run the R script to compute coocs
 			if(Global.VERBOSE) System.out.print("Computing coocurrence scores...");
-			CoocScoringModule.compute(Global.STATS_PFPT_PATH, Global.R_RESULTS_PFPT_PATH);
-			CoocScoringModule.compute(Global.STATS_PTPT_PATH, Global.R_RESULTS_PTPT_PATH);
+			Set<ValidatedDomain> validatedDomainsPFPT = CoocScoringModule.compute(Global.STATS_PFPT_PATH, Global.R_RESULTS_PFPT_PATH);
+			Set<ValidatedDomain> validatedDomainsPTPT = CoocScoringModule.compute(Global.STATS_PTPT_PATH, Global.R_RESULTS_PTPT_PATH);
 			if(Global.VERBOSE) System.out.println("done.");
 
 			//Step 8: Parse R results to identify validated putative domains
 			if(Global.VERBOSE) System.out.println("Parsing R results and store validated domains...");
-			//charge les resultats du RParser
-			Set<ValidatedDomain> validatedDomainsPFPT = RParser.getValidatedDomains(Global.R_RESULTS_PFPT_PATH);
-			Set<ValidatedDomain> validatedDomainsPTPT = RParser.getValidatedDomains(Global.R_RESULTS_PTPT_PATH);
 			//init
 			Set<String> vDomainsPFPT = new HashSet<String>(); //les id des domaines valides par PFPT
 			Set<String> vDomainsPTPT = new HashSet<String>(); //les id des domaines valides par PTPT
@@ -200,19 +197,39 @@ public class Main {
 			if(Global.KEEPONLYBESTPVALUE) {
 				Map<String,ValidatedDomain> keepBestPvalue = new HashMap<String, ValidatedDomain>();
 				ValidatedDomain tmpVD;
-				for(ValidatedDomain vd : validatedDomainsPFPT) {
-					tmpVD = keepBestPvalue.get(vd.getIdentifierValidatedDomain());
-					if(tmpVD!=null) {
-						if(vd.getScore()<tmpVD.getScore()) {
+				//gere les PFPT
+				if(Global.INCLUDEPFPTVALIDATIONS) {
+					for(ValidatedDomain vd : validatedDomainsPFPT) {
+						tmpVD = keepBestPvalue.get(vd.getIdentifierValidatedDomain());
+						if(tmpVD!=null) {
+							if(vd.getScore()<tmpVD.getScore()) {
+								keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
+							}
+						} else {
 							keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
 						}
-					} else {
-						keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
+					}
+					validatedDomainsPFPT.clear();
+					for(String s : keepBestPvalue.keySet()) {
+						validatedDomainsPFPT.add(keepBestPvalue.get(s));
 					}
 				}
-				validatedDomainsPFPT.clear();
-				for(String s : keepBestPvalue.keySet()) {
-					validatedDomainsPFPT.add(keepBestPvalue.get(s));
+				//gere les PTPT
+				if(Global.INCLUDEPTPTVALIDATIONS) {
+					Set<ValidatedDomain> removables = new HashSet<ValidatedDomain>();
+					for(ValidatedDomain vd : validatedDomainsPTPT) {
+						tmpVD = keepBestPvalue.get(vd.getIdentifierValidatedDomain());
+						if(tmpVD!=null) {
+							if(vd.getScore()<tmpVD.getScore()) {
+								removables.add(vd);
+								keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
+							}
+						} else {
+							keepBestPvalue.put(vd.getIdentifierValidatedDomain(), vd);
+						}
+					}
+					//A FINIR
+					//TODO
 				}
 			}
 			//--Garde 
@@ -272,10 +289,7 @@ public class Main {
 
 			if(Global.VERBOSE) System.out.println("Printing results for validated domains PTPT...");
 			Map<PutativeDomain,Set<String>> pdomainsPTPT = new HashMap<PutativeDomain, Set<String>>();
-			
-			System.out.println(">. "+validatedDomainsPFPT);
-			System.out.println(">. "+validatedDomainsPTPT);
-			
+
 			for(ValidatedDomain vDomain : validatedDomainsPTPT) {
 				PutativeDomain domain = null;
 				for(PutativeDomain pd : putativeDomainsByProt.get(vDomain.getIdentifierValidatedDomain().split("/")[0])) {
@@ -340,7 +354,6 @@ public class Main {
 						}
 					}
 				}
-				System.out.println();
 				for(PutativeDomain dom : pdomainsPTPT.keySet()) { //puis chaque PTPT
 					for(String validantID : pdomainsPTPT.get(dom)) { //pour chaque validant
 						for(PutativeDomain validatingDomain : putativeDomainsByProt.get(dom.getQueryName()+"_"+dom.getQuerySpecies())) {
@@ -353,9 +366,9 @@ public class Main {
 						}
 					}
 				}
-				
+
 			}
-			
+
 			if(Global.VERBOSE && Global.DYNAMIC_DISPLAY) System.out.println();
 			if(Global.VERBOSE) System.out.println("Printing done.");
 			FastaPrinter.close();

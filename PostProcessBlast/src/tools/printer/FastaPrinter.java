@@ -13,7 +13,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import parser.RefProtParser;
+import tools.parser.RefProtParser;
 import model.BlastHit;
 import model.Protein;
 import model.PutativeDomain;

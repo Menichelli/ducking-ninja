@@ -1,4 +1,4 @@
-package parser;
+package tools.parser;
 
 import global.Global;
 

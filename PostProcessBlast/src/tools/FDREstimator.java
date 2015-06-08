@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import parser.RParser;
+import tools.parser.RParser;
 import tools.printer.StatsPrinter;
 import model.CouplePfamPutative;
 import model.PfamFamily;

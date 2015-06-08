@@ -8,7 +8,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import model.Proteome;
-import parser.RefProtParser;
+import tools.parser.RefProtParser;
 
 
 public class Global {
