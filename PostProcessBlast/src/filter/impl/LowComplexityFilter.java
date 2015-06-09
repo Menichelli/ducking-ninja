@@ -16,30 +16,52 @@ import global.Global;
  *
  */
 public class LowComplexityFilter implements Ifilter {
-
-	/* (non-Javadoc)
-	 * @see filter.Ifilter#filter(model.PutativeDomain)
-	 */
-	@Override
+	
+	private static Ifilter instance;
+	
+	private final static int WINDOWSIZE = 20;
+	private final static int STEPSIZE = 3;
+	
+	private LowComplexityFilter() {}
+	
+	public static Ifilter getInstance() {
+		instance = (instance==null)?new LowComplexityFilter():instance;
+		return instance;
+	}
+	
 	public PutativeDomain filter(PutativeDomain domain) {
 		PutativeDomain ret = null;
 		
-		Protein p = Global.PROTEOME_AIMED.getProteinByName(domain.getQueryName()+domain.getQuerySpecies());
-		
+		Protein p = Global.PROTEOME_AIMED.getProteinByName(domain.getQueryName()+"_"+domain.getQuerySpecies());
+
 		String sequence = "";
-		for(int index=domain.getDomainStart(); index<domain.getDomainEnd(); index++) {
+		for(int index=domain.getDomainStart(); index<domain.getDomainEnd()-1; index++) {
 			sequence += p.getSequence().charAt(index);
 		}
 		
-		if(!isLowComplexity(sequence)) ret = domain;
-		
+		int step = 0;
+		String subseq;
+		boolean isValid = true;
+		int beginIndex = 0;
+		while(beginIndex<sequence.length()-WINDOWSIZE-2) {
+			beginIndex=step*STEPSIZE;
+			subseq = sequence.substring(beginIndex, beginIndex+WINDOWSIZE);
+			if(isLowComplexity(subseq)) {
+				isValid = false;
+				break;
+			}
+			step++;
+		}
+
+		if(isValid) ret = domain;
+
 		return ret;
 	}
-	
+
 	private boolean isLowComplexity(String sequence) {
-		boolean ret;
+		boolean ret = false;
 		Set<Character> chars = new HashSet<Character>();
-		for(char c : sequence.toCharArray()) chars.add(c);
+		for(char c : sequence.toCharArray()) {chars.add(c);}
 		ret = (Math.log(chars.size())/Math.log(2) < 2.2); //Algo SEG
 		return ret;
 	}

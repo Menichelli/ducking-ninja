@@ -3,6 +3,7 @@ package tools;
 import filter.FilterFacade;
 import filter.impl.BestEvalueFilter;
 import filter.impl.BoundShrinker;
+import filter.impl.LowComplexityFilter;
 import filter.impl.TooFewHitsFilter;
 import filter.impl.TooLongHitsFilter;
 import filter.impl.TooSmallDomainFilter;
@@ -81,6 +82,9 @@ public class HitsGathering {
 		pDomains = FilterFacade.applyFilter(TooFewHitsFilter.class, pDomains);
 		pDomains = FilterFacade.applyFilter(BoundShrinker.class, pDomains);
 		pDomains = FilterFacade.applyFilter(TooSmallDomainFilter.class, pDomains);
+		
+		//low complexity filter
+		pDomains = FilterFacade.applyFilter(LowComplexityFilter.class, pDomains);
 		
 		ret.addAll(pDomains);
 		return ret;

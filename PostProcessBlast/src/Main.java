@@ -354,6 +354,8 @@ public class Main {
 						}
 					}
 				}
+				domPrinted=0;
+				System.out.println();
 				for(PutativeDomain dom : pdomainsPTPT.keySet()) { //puis chaque PTPT
 					for(String validantID : pdomainsPTPT.get(dom)) { //pour chaque validant
 						for(PutativeDomain validatingDomain : putativeDomainsByProt.get(dom.getQueryName()+"_"+dom.getQuerySpecies())) {
